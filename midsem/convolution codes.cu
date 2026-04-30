@@ -34,45 +34,20 @@ __global__ void spmv_csr_kernel(int num_rows, const float* data, const int* col_
 }
 
 
-
-
-
-__constant__ int d_W[MAX_TILE]; // constant memory for weights
-
-__global__ void tiledKernel(char *A, char *B, char *C, int N, int TILE_WIDTH) {
-
-    __shared__ char sA[MAX_TILE][MAX_TILE];
-    __shared__ char sB[MAX_TILE][MAX_TILE];
-
-    int row = blockIdx.y * TILE_WIDTH + threadIdx.y;
-    int col = blockIdx.x * TILE_WIDTH + threadIdx.x;
-
-    int sum = 0;
-
-    // Loop over tiles
-    for (int t = 0; t < N / TILE_WIDTH; t++) {
-
-        // Load tiles into shared memory
-        sA[threadIdx.y][threadIdx.x] = A[row * N + (t * TILE_WIDTH + threadIdx.x)];
-        sB[threadIdx.y][threadIdx.x] = B[(t * TILE_WIDTH + threadIdx.y) * N + col];
-
-        __syncthreads();
-
-        // Compute partial result
-        for (int k = 0; k < TILE_WIDTH; k++) {
-
-            int a_val = (int)sA[threadIdx.y][k];
-            int b_val = (int)sB[k][threadIdx.x];
-
-            int weight = d_W[(t * TILE_WIDTH + k) % TILE_WIDTH];
-
-            sum += (a_val + b_val) * weight;
-        }
-
-        __syncthreads();
-    }
-
-    // Final mod + convert to char
-    sum = sum % 26;
-    C[row * N + col] = (char)(sum + 'A');
+__global__ void tiledConv(int *N, int *M, int *P, int width, int mask_width) {
+__shared__ int tile[MAX];       //tile is a shared array
+int tx = threadIdx.x;
+int i = blockIdx.x * blockDim.x + tx;
+int half = mask_width / 2;
+tile[tx] = (i < width) ? N[i] : 0;   //tile value is assigned as matrix value or 0 if out of bounds
+__syncthreads();
+int sum = 0;
+if (i < width) {                                //this part is same as the normal convolution
+for (int j = 0; j < mask_width; j++) {
+    int idx = tx - half + j;
+    if (idx >= 0 && idx < blockDim.x)
+    sum += tile[idx] * M[j];    //convolution with mask and tile
+}
+P[i] = sum;
+}
 }
