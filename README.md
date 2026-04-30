@@ -1,4 +1,4 @@
-# Parallel Programming Lab Manual
+# Parallel Programming 
 
 A comprehensive collection of parallel programming implementations using **MPI**, **CUDA**, and **OpenCL** frameworks for distributed computing and GPU acceleration.
 
