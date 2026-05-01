@@ -20,26 +20,23 @@ int main() {
         B[i] = i;
     }
 
-    cl_platform_id platform;
-    cl_device_id device;
-    cl_context context;
-    cl_command_queue queue;
-
-    cl_program program;
-    cl_kernel kernel;
 
     cl_mem bufferA, bufferB, bufferC;
 
     // STEP 1: Platform
+    cl_platform_id platform;
     clGetPlatformIDs(1, &platform, NULL);
 
     // STEP 2: Device
+    cl_device_id device;
     clGetDeviceIDs(platform, CL_DEVICE_TYPE_GPU, 1, &device, NULL);
 
     // STEP 3: Context
+    cl_context context;
     context = clCreateContext(NULL, 1, &device, NULL, NULL, NULL);
 
     // STEP 4: Command Queue
+    cl_command_queue queue;
     queue = clCreateCommandQueue(context, device, 0, NULL);
 
     // STEP 5: Buffers
@@ -52,10 +49,12 @@ int main() {
     clEnqueueWriteBuffer(queue, bufferB, CL_TRUE, 0, sizeof(int)*N, B, 0, NULL, NULL);
 
     // STEP 7: Program
+    cl_program program;
     program = clCreateProgramWithSource(context, 1, &kernelSource, NULL, NULL);
     clBuildProgram(program, 1, &device, NULL, NULL, NULL);
 
     // STEP 8: Kernel
+    cl_kernel kernel;
     kernel = clCreateKernel(program, "vec_add", NULL);
 
     // STEP 9: Arguments
