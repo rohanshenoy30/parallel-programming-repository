@@ -55,46 +55,37 @@ P[i] = sum;
 
 
 //tiled matrix multiplication
+__global__ void MatrixMulKernel(float* d_M, float* d_N, float* d_P, int Width) {
 
-#define TILE_WIDTH 16
+    __shared__ float Mds[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float Nds[TILE_WIDTH][TILE_WIDTH];
 
-__global__ void matMulTiled(float *A, float *B, float *C, int N) {
+    int bx = blockIdx.x;  
+    int by = blockIdx.y;
+    int tx = threadIdx.x;  
+    int ty = threadIdx.y;
 
-    __shared__ float As[TILE_WIDTH][TILE_WIDTH];
-    __shared__ float Bs[TILE_WIDTH][TILE_WIDTH];
+    // Identify the row and column of the d_P element to work on
+    int Row = by * TILE_WIDTH + ty;
+    int Col = bx * TILE_WIDTH + tx;
 
-    // Row and column of output
-    int Row = blockIdx.y * TILE_WIDTH + threadIdx.y;
-    int Col = blockIdx.x * TILE_WIDTH + threadIdx.x;
+    float Pvalue = 0;
 
-    float sum = 0.0;
+    // Loop over the d_M and d_N tiles required to compute d_P element
+    for (int m = 0; m < Width / TILE_WIDTH; ++m) {
 
-    // Loop over tiles
-    for (int t = 0; t < (N + TILE_WIDTH - 1)/TILE_WIDTH; t++) {
+        // Collaborative loading of d_M and d_N tiles into shared memory
+        Mds[ty][tx] = d_M[Row * Width + m * TILE_WIDTH + tx];
+        Nds[ty][tx] = d_N[(m * TILE_WIDTH + ty) * Width + Col];
 
-        // Load tile of A into shared memory
-        if (Row < N && (t*TILE_WIDTH + threadIdx.x) < N)
-            As[threadIdx.y][threadIdx.x] = A[Row * N + t*TILE_WIDTH + threadIdx.x];
-        else
-            As[threadIdx.y][threadIdx.x] = 0.0;
+        __syncthreads();
 
-        // Load tile of B into shared memory
-        if (Col < N && (t*TILE_WIDTH + threadIdx.y) < N)
-            Bs[threadIdx.y][threadIdx.x] = B[(t*TILE_WIDTH + threadIdx.y) * N + Col];
-        else
-            Bs[threadIdx.y][threadIdx.x] = 0.0;
-
-        __syncthreads();  // Wait for all threads
-
-        // Multiply tiles
-        for (int k = 0; k < TILE_WIDTH; k++) {
-            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        for (int k = 0; k < TILE_WIDTH; ++k) {
+            Pvalue += Mds[ty][k] * Nds[k][tx];
         }
 
-        __syncthreads();  // Before loading next tile
+        __syncthreads();
     }
 
-    // Write result
-    if (Row < N && Col < N)
-        C[Row * N + Col] = sum;
+    d_P[Row * Width + Col] = Pvalue;
 }
