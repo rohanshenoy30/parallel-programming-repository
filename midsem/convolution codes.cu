@@ -51,3 +51,49 @@ for (int j = 0; j < mask_width; j++) {
 P[i] = sum;
 }
 }
+
+
+
+//tiled matrix multiplication
+
+#define TILE_WIDTH 16
+
+__global__ void tiledMatMul(int *A, int *B, int *C, int N) {
+
+    __shared__ int As[TILE_WIDTH][TILE_WIDTH];
+    __shared__ int Bs[TILE_WIDTH][TILE_WIDTH];
+
+    int tx = threadIdx.x;
+    int ty = threadIdx.y;
+
+    int Row = blockIdx.y * TILE_WIDTH + ty;
+    int Col = blockIdx.x * TILE_WIDTH + tx;
+
+    int sum = 0;
+
+    for (int t = 0; t < (N + TILE_WIDTH - 1) / TILE_WIDTH; t++) {
+
+        // Load tile from A
+        if (Row < N && (t * TILE_WIDTH + tx) < N)
+            As[ty][tx] = A[Row * N + t * TILE_WIDTH + tx];
+        else
+            As[ty][tx] = 0;
+
+        // Load tile from B
+        if (Col < N && (t * TILE_WIDTH + ty) < N)
+            Bs[ty][tx] = B[(t * TILE_WIDTH + ty) * N + Col];
+        else
+            Bs[ty][tx] = 0;
+
+        __syncthreads();
+
+        // Multiply tiles
+        for (int k = 0; k < TILE_WIDTH; k++)
+            sum += As[ty][k] * Bs[k][tx];
+
+        __syncthreads();
+    }
+
+    if (Row < N && Col < N)
+        C[Row * N + Col] = sum;
+}
