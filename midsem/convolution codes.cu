@@ -58,42 +58,43 @@ P[i] = sum;
 
 #define TILE_WIDTH 16
 
-__global__ void tiledMatMul(int *A, int *B, int *C, int N) {
+__global__ void matMulTiled(float *A, float *B, float *C, int N) {
 
-    __shared__ int As[TILE_WIDTH][TILE_WIDTH];
-    __shared__ int Bs[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float As[TILE_WIDTH][TILE_WIDTH];
+    __shared__ float Bs[TILE_WIDTH][TILE_WIDTH];
 
-    int tx = threadIdx.x;
-    int ty = threadIdx.y;
+    // Row and column of output
+    int Row = blockIdx.y * TILE_WIDTH + threadIdx.y;
+    int Col = blockIdx.x * TILE_WIDTH + threadIdx.x;
 
-    int Row = blockIdx.y * TILE_WIDTH + ty;
-    int Col = blockIdx.x * TILE_WIDTH + tx;
+    float sum = 0.0;
 
-    int sum = 0;
+    // Loop over tiles
+    for (int t = 0; t < (N + TILE_WIDTH - 1)/TILE_WIDTH; t++) {
 
-    for (int t = 0; t < (N + TILE_WIDTH - 1) / TILE_WIDTH; t++) {
-
-        // Load tile from A
-        if (Row < N && (t * TILE_WIDTH + tx) < N)
-            As[ty][tx] = A[Row * N + t * TILE_WIDTH + tx];
+        // Load tile of A into shared memory
+        if (Row < N && (t*TILE_WIDTH + threadIdx.x) < N)
+            As[threadIdx.y][threadIdx.x] = A[Row * N + t*TILE_WIDTH + threadIdx.x];
         else
-            As[ty][tx] = 0;
+            As[threadIdx.y][threadIdx.x] = 0.0;
 
-        // Load tile from B
-        if (Col < N && (t * TILE_WIDTH + ty) < N)
-            Bs[ty][tx] = B[(t * TILE_WIDTH + ty) * N + Col];
+        // Load tile of B into shared memory
+        if (Col < N && (t*TILE_WIDTH + threadIdx.y) < N)
+            Bs[threadIdx.y][threadIdx.x] = B[(t*TILE_WIDTH + threadIdx.y) * N + Col];
         else
-            Bs[ty][tx] = 0;
+            Bs[threadIdx.y][threadIdx.x] = 0.0;
 
-        __syncthreads();
+        __syncthreads();  // Wait for all threads
 
         // Multiply tiles
-        for (int k = 0; k < TILE_WIDTH; k++)
-            sum += As[ty][k] * Bs[k][tx];
+        for (int k = 0; k < TILE_WIDTH; k++) {
+            sum += As[threadIdx.y][k] * Bs[k][threadIdx.x];
+        }
 
-        __syncthreads();
+        __syncthreads();  // Before loading next tile
     }
 
+    // Write result
     if (Row < N && Col < N)
         C[Row * N + Col] = sum;
 }
